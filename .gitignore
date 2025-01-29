@@ -48,3 +48,4 @@ wandb/
 /results
 /models
 /assets
+/job-queue-listener/node_modules
