@@ -302,7 +302,7 @@ class LipsyncPipeline(DiffusionPipeline):
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
-        data_file_url: Optional[str] = None,
+        data_path: Optional[str] = None,
         **kwargs,
     ):
         
@@ -319,13 +319,8 @@ class LipsyncPipeline(DiffusionPipeline):
             self.image_processor = ImageProcessor(height, mask=mask, device="cuda")
             self.set_progress_bar_config(desc=f"Sample frames: {num_frames}")
             
-            if data_file_url:
-                parsed_url = urlparse(data_file_url)
-                filename = parsed_url.path.split("/")[-1]
-                file_path = "data/{}".format(filename)
-                if not os.path.exists(file_path):
-                    download_file(data_file_url, file_path)
-                loaded_data = torch.load(file_path)
+            if data_path:
+                loaded_data = torch.load(data_path)
                 faces = loaded_data["faces"]
                 boxes = loaded_data["boxes"]
                 affine_matrices = loaded_data["affine_matrices"]

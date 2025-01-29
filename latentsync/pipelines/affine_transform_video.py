@@ -20,7 +20,7 @@ def affine_transform_video(image_processor, video_path):
     faces = torch.stack(faces)
     return faces, video_frames, boxes, affine_matrices
 
-def generate_affine_transforms(video_path, height: int = 512, mask: str = "fix_mask"):
+def generate_affine_transforms(video_path, output_path, height: int = 512, mask: str = "fix_mask"):
     image_processor = ImageProcessor(height, mask=mask, device="cuda")
 
     faces, video_frames, boxes, affine_matrices = affine_transform_video(
@@ -32,4 +32,4 @@ def generate_affine_transforms(video_path, height: int = 512, mask: str = "fix_m
         "boxes": boxes,
         "affine_matrices": affine_matrices
     }
-    torch.save(data_to_save, "data.pth")
+    torch.save(data_to_save, output_path)

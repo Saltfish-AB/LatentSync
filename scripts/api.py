@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import asyncio
 from omegaconf import OmegaConf
@@ -26,9 +26,7 @@ processing_semaphore = asyncio.Semaphore(1)
 
 class RequestPayload(BaseModel):
     id: str
-    video_url: str
     audio_url: str
-    data_url: str
 
 
 @app.on_event("startup")
@@ -90,19 +88,20 @@ async def process_requests():
         try:
             async with processing_semaphore:
                 start_time = time.time()
-                id = payload["id"]
-                video_url = payload["video_url"]
+                video_id = payload["id"]
                 audio_url = payload["audio_url"]
-                data_url = payload["data_url"]
 
-                video_path = "assets/{}.mp4".format(id)
-                audio_path = "assets/{}.wav".format(id)
+                video_path = "/latent-sync-data/{}.mp4".format(video_id)
+                data_path = "/latent-sync-data/{}.pth".format(video_id)
+                audio_path = "/latent-sync-data/{}.wav".format(video_id)
                 if not os.path.exists(video_path):
-                    download_file(video_url, video_path)
+                    raise HTTPException(status_code=400, detail="Video file not found.")
+                if not os.path.exists(data_path):
+                    raise HTTPException(status_code=400, detail="Data file not found.")
                 if not os.path.exists(audio_path):
                     download_file(audio_url, audio_path)
 
-                video_out_path = "results/{}.mp4".format(id)
+                video_out_path = "results/{}.mp4".format(video_id)
                 config = app.state.shared_variable["config"]
                 dtype = app.state.shared_variable["dtype"]
                 app.state.shared_variable["pipeline"](
@@ -116,7 +115,7 @@ async def process_requests():
                     weight_dtype=dtype,
                     width=config.data.resolution,
                     height=config.data.resolution,
-                    data_file_url=data_url
+                    data_path=data_path
                 )
 
                 output_id = uuid.uuid4()

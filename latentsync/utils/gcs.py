@@ -12,7 +12,7 @@ else:
     print("Environment variable SERVICE_ACCOUNT_KEY_PATH is not set.")
 
 # Initialize a GCS client
-credentials = service_account.Credentials.from_service_account_file(service_account_path)
+credentials = service_account.Credentials.from_service_account_file(service_account_path or "/secrets/saltfish-434012-8c642217c8e8.json")
 
 # Initialize a GCS client with the credentials
 storage_client = storage.Client(credentials=credentials)
