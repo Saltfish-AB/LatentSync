@@ -43,17 +43,39 @@ const runLoop = async () => {
 
 const handleJob = async (job: ModelQueueJob) => {
   await updateStatus(job, "running");
-  let resultPath: string | undefined = undefined;
-
   try {
-    console.log(job)
+    const url = 'http://34.60.204.208:8000/process';
+    const payload = {
+        id: job.id,
+        video_id: job.params.avatarVideoId,
+        audio_url: job.params.audioUrl
+    };
+
+    console.log(payload)
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Response:', result);
+    await updateStatus(job, "completed", result.output_url);
+    return result;
   } catch (error) {
     console.error(`Failed to handle job ${job.id}:`, error);
     await updateStatus(job, "failed");
     return;
   }
 
-  await updateStatus(job, "completed", resultPath);
+  
 };
 
 runLoop();
