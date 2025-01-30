@@ -44,7 +44,7 @@ const runLoop = async () => {
 const handleJob = async (job: ModelQueueJob) => {
   await updateStatus(job, "running");
   try {
-    const url = 'http://34.60.204.208:8000/process';
+    const url = 'http://localhost:8000/process';
     const payload = {
         id: job.id,
         video_id: job.params.avatarVideoId,
