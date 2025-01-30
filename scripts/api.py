@@ -26,6 +26,7 @@ processing_semaphore = asyncio.Semaphore(1)
 
 class RequestPayload(BaseModel):
     id: str
+    video_id: str
     audio_url: str
 
 
@@ -88,12 +89,13 @@ async def process_requests():
         try:
             async with processing_semaphore:
                 start_time = time.time()
-                video_id = payload["id"]
+                id = payload["id"]
+                video_id = payload["video_id"]
                 audio_url = payload["audio_url"]
 
                 video_path = "/latent-sync-data/{}.mp4".format(video_id)
                 data_path = "/latent-sync-data/{}.pth".format(video_id)
-                audio_path = "/latent-sync-data/{}.wav".format(video_id)
+                audio_path = "/latent-sync-data/{}.wav".format(id)
                 if not os.path.exists(video_path):
                     raise HTTPException(status_code=400, detail="Video file not found.")
                 if not os.path.exists(data_path):
@@ -101,7 +103,7 @@ async def process_requests():
                 if not os.path.exists(audio_path):
                     download_file(audio_url, audio_path)
 
-                video_out_path = "results/{}.mp4".format(video_id)
+                video_out_path = "results/{}.mp4".format(id)
                 config = app.state.shared_variable["config"]
                 dtype = app.state.shared_variable["dtype"]
                 app.state.shared_variable["pipeline"](
