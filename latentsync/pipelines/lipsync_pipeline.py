@@ -7,6 +7,8 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
+from ..utils.repeat import repeat_to_length
+
 from ..utils.edit_audio import add_silence_to_audio
 from ..utils.download import download_file
 
@@ -356,7 +358,17 @@ class LipsyncPipeline(DiffusionPipeline):
                 whisper_feature = self.audio_encoder.audio2feat(new_audio_path)
                 whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
 
-                num_inferences = min(len(faces), len(whisper_chunks)) // num_frames
+                num_faces = len(faces)
+                num_whisper = len(whisper_chunks)
+
+                if num_whisper > num_faces:
+                    faces = repeat_to_length(faces, num_whisper)
+                    boxes = repeat_to_length(boxes, num_whisper)
+                    original_video_frames = repeat_to_length(original_video_frames, num_whisper)
+                    affine_matrices = repeat_to_length(affine_matrices, num_whisper)
+
+                num_faces = len(faces)
+                num_inferences = min(num_faces, num_whisper) // num_frames
             else:
                 num_inferences = len(faces) // num_frames
 
