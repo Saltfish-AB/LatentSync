@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import asyncio
@@ -28,6 +29,7 @@ class RequestPayload(BaseModel):
     id: str
     video_id: str
     audio_url: str
+    start_from_backwards: Optional[bool] = None
 
 
 @app.on_event("startup")
@@ -92,6 +94,7 @@ async def process_requests():
                 id = payload["id"]
                 video_id = payload["video_id"]
                 audio_url = payload["audio_url"]
+                start_from_backwards = payload["start_from_backwards"] or False
 
                 video_path = "/latent-sync-data/{}.mp4".format(video_id)
                 data_path = "/latent-sync-data/{}.pth".format(video_id)
@@ -117,7 +120,8 @@ async def process_requests():
                     weight_dtype=dtype,
                     width=config.data.resolution,
                     height=config.data.resolution,
-                    data_path=data_path
+                    data_path=data_path,
+                    start_from_backwards=start_from_backwards
                 )
 
                 output_id = uuid.uuid4()

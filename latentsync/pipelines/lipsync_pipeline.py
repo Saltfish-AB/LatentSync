@@ -7,7 +7,7 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from ..utils.repeat import repeat_to_length
+from ..utils.repeat import pad_whisper_chunks, prepend_zero_tensors, repeat_to_length, truncate_to_length
 
 from ..utils.edit_audio import add_silence_to_audio
 from ..utils.download import download_file
@@ -305,15 +305,14 @@ class LipsyncPipeline(DiffusionPipeline):
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
         data_path: Optional[str] = None,
+        start_from_backwards: Optional[bool] = True,
         **kwargs,
     ):
         
-        if not os.path.exists(video_out_path):
+        if not os.path.exists(video_out_path) or True:
 
             is_train = self.unet.training
             self.unet.eval()
-
-            check_ffmpeg_installed()
 
             # 0. Define call parameters
             batch_size = 1
@@ -330,10 +329,7 @@ class LipsyncPipeline(DiffusionPipeline):
             else:
                 faces, original_video_frames, boxes, affine_matrices = affine_transform_video(self.image_processor, video_path)
 
-            new_audio_path = f"results/new_audio.wav"
-            add_silence_to_audio(audio_path, new_audio_path, 0.35)
-    
-            audio_samples = read_audio(new_audio_path)
+            audio_samples = read_audio(audio_path)
             # 1. Default height and width to unet
             height = height or self.unet.config.sample_size * self.vae_scale_factor
             width = width or self.unet.config.sample_size * self.vae_scale_factor
@@ -354,9 +350,14 @@ class LipsyncPipeline(DiffusionPipeline):
             extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
             self.video_fps = video_fps
+            
             if self.unet.add_audio_layer:
-                whisper_feature = self.audio_encoder.audio2feat(new_audio_path)
+                whisper_feature = self.audio_encoder.audio2feat(audio_path)
                 whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
+                
+                padding_duration = 0
+                if start_from_backwards:
+                    whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
 
                 num_faces = len(faces)
                 num_whisper = len(whisper_chunks)
@@ -368,6 +369,17 @@ class LipsyncPipeline(DiffusionPipeline):
                     affine_matrices = repeat_to_length(affine_matrices, num_whisper)
 
                 num_faces = len(faces)
+                print(num_faces, num_whisper, start_from_backwards)
+
+                if num_faces != num_whisper and start_from_backwards:
+                    faces = truncate_to_length(faces, num_whisper)
+                    boxes = truncate_to_length(boxes, num_whisper)
+                    original_video_frames = truncate_to_length(original_video_frames, num_whisper)
+                    affine_matrices = truncate_to_length(affine_matrices, num_whisper)
+                
+                num_faces = len(faces)
+                print(num_faces, num_whisper)
+
                 num_inferences = min(num_faces, num_whisper) // num_frames
             else:
                 num_inferences = len(faces) // num_frames
@@ -488,3 +500,4 @@ class LipsyncPipeline(DiffusionPipeline):
 
             command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
             subprocess.run(command, shell=True)
+
