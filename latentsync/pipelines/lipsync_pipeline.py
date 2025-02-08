@@ -7,7 +7,7 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from ..utils.repeat import pad_whisper_chunks, prepend_zero_tensors, repeat_to_length, truncate_to_length
+from ..utils.repeat import pad_whisper_chunks, pad_whisper_chunks_end, prepend_zero_tensors, repeat_to_length, truncate_to_length
 
 from ..utils.edit_audio import add_silence_to_audio
 from ..utils.download import download_file
@@ -358,6 +358,8 @@ class LipsyncPipeline(DiffusionPipeline):
                 padding_duration = 0
                 if start_from_backwards:
                     whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+                else:
+                    whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
 
                 num_faces = len(faces)
                 num_whisper = len(whisper_chunks)

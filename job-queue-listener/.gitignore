@@ -53,3 +53,5 @@ configs/
 data/
 
 scripts/render_logo.js
+
+dist/
