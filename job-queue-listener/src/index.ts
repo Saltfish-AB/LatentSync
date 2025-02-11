@@ -52,6 +52,9 @@ const updateStatus = async (
         });
         return;
       }
+      if(job.totalChildren === 0){
+        updateData.status = "completed"
+      }
       await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
