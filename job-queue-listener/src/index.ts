@@ -47,13 +47,13 @@ const updateStatus = async (
   } else if(job.params.dynamicClipId){
     try {
       if(status === "completed") {
-        await updateDocument("dynamic-clips", job.params.dynamicClipId, {
-          outputUrl
-        });
+        const dynamicClip = await getDocumentById("dynamic-clips", job.params.dynamicClipId)
+        let data: { outputUrl: string | undefined; status?: string } = { outputUrl };
+        if(dynamicClip!.totalChildren === 0){
+          data.status = "completed"
+        }
+        await updateDocument("dynamic-clips", job.params.dynamicClipId, data);
         return;
-      }
-      if(job.totalChildren === 0){
-        updateData.status = "completed"
       }
       await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
     } catch (error) {

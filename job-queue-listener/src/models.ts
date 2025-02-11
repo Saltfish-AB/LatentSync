@@ -10,5 +10,4 @@ export interface ModelQueueJob {
   clipId?: string;
   children?: Record<string, any>;
   removeLogo?: boolean;
-  totalChildren?: number;
 }
