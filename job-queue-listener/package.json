@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start-prod": "nohup npm run start-local > /home/henrikeriksson/job_queue.log 2>&1 &",
     "build": "npx tsc && tsc-alias",
     "start": "tsx /app/src/index.ts",
     "start-local": "npx tsc && node dist/index.js",
