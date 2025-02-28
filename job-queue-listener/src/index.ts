@@ -63,7 +63,7 @@ const updateStatus = async (
     }
   } else if(job?.dynamicInserts){
     try {
-      const dynamicInserts = job.params.dynamicInserts;
+      const dynamicInserts = job.dynamicInserts;
       await updateDocument(`dynamic-inserts/${dynamicInserts.dynamicInsertId}/inserts`, dynamicInserts.insertId, updateData);
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
