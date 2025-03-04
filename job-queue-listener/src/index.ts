@@ -55,9 +55,9 @@ const updateStatus = async (
           data.status = "completed"
         }
         await updateDocument("dynamic-clips", job.params.dynamicClipId, data);
-        return;
+      } else {
+        await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
       }
-      await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
     }
@@ -83,6 +83,9 @@ const updateStatus = async (
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
     }
+  }
+  if(job.params?.clipId){
+    await updateDocument(`clips`, job.params.clipId, updateData);
   }
 };
 
