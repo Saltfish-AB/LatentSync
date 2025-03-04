@@ -64,6 +64,21 @@ const updateStatus = async (
   } else if(job?.dynamicInserts){
     try {
       const dynamicInserts = job.dynamicInserts;
+      if(status === "completed") {
+        await updateDocument("dynamic-inserts", dynamicInserts.dynamicInsertId, {
+          completedChildren: FieldValue.increment(1)
+        });
+        const dynamicInsert = await getDocumentById("dynamic-inserts", dynamicInserts.dynamicInsertId)
+        console.log(dynamicInsert)
+        console.log(dynamicInsert!.completedChildren, dynamicInsert!.totalChildren, dynamicInsert!.completedChildren >= dynamicInsert!.totalChildren)
+        if(dynamicInsert!.completedChildren >= dynamicInsert!.totalChildren){
+          await updateDocument("dynamic-inserts", dynamicInserts.dynamicInsertId, {
+            status: "completed"
+          });
+        }
+      } else {
+        await updateDocument(`dynamic-inserts`, dynamicInserts.dynamicInsertId, updateData);
+      }
       await updateDocument(`dynamic-inserts/${dynamicInserts.dynamicInsertId}/inserts`, dynamicInserts.insertId, updateData);
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
