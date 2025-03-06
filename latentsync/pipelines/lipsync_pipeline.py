@@ -7,7 +7,7 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from ..utils.repeat import duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_start, prepend_zero_tensors, process_video_with_trim, repeat_to_length, truncate_to_length
+from ..utils.repeat import add_start_silence, duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_to_target, pad_whisper_chunks_start, prepend_zero_tensors, process_video_with_trim, repeat_to_length, truncate_to_length
 
 from ..utils.edit_audio import add_silence_to_audio
 from ..utils.download import download_file
@@ -306,6 +306,7 @@ class LipsyncPipeline(DiffusionPipeline):
         callback_steps: Optional[int] = 1,
         data_path: Optional[str] = None,
         start_from_backwards: Optional[bool] = True,
+        force_video_length: Optional[bool] = False,
         **kwargs,
     ):
         
@@ -356,19 +357,26 @@ class LipsyncPipeline(DiffusionPipeline):
                 whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
                 
                 padding_duration = 0
-                if start_from_backwards:
-                    whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+
+                if not force_video_length:
+                    if start_from_backwards:
+                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+                    else:
+                        audio_samples = add_start_silence(audio_samples, audio_sample_rate)
+                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+
+                    num_faces = len(faces)
+                    num_whisper = len(whisper_chunks)
+
+                    if num_whisper > num_faces:
+                        faces = repeat_to_length(faces, num_whisper)
+                        boxes = repeat_to_length(boxes, num_whisper)
+                        original_video_frames = repeat_to_length(original_video_frames, num_whisper)
+                        affine_matrices = repeat_to_length(affine_matrices, num_whisper)
                 else:
-                    whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
-
-                num_faces = len(faces)
-                num_whisper = len(whisper_chunks)
-
-                if num_whisper > num_faces:
-                    faces = repeat_to_length(faces, num_whisper)
-                    boxes = repeat_to_length(boxes, num_whisper)
-                    original_video_frames = repeat_to_length(original_video_frames, num_whisper)
-                    affine_matrices = repeat_to_length(affine_matrices, num_whisper)
+                    num_faces = len(faces)
+                    whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_to_target(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_faces, fps=self.video_fps)
+                    num_whisper = len(whisper_chunks)
 
                 num_faces = len(faces)
                 print(num_faces, num_whisper, start_from_backwards)
@@ -387,8 +395,11 @@ class LipsyncPipeline(DiffusionPipeline):
 
                 num_faces = len(faces)
                 print(num_faces, num_whisper)
-
-                num_inferences = min(num_faces, num_whisper) // num_frames
+                
+                if not force_video_length:
+                    num_inferences = min(num_faces, num_whisper) // num_frames
+                else:
+                    num_inferences = num_faces // num_frames
             else:
                 num_inferences = len(faces) // num_frames
 
@@ -506,10 +517,10 @@ class LipsyncPipeline(DiffusionPipeline):
 
             sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
             
-            if start_from_backwards:
+            if start_from_backwards or force_video_length:
                 command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
             else:
-                command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 -t $(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {os.path.join(temp_dir, 'video.mp4')} | awk '{{print $1-{padding_duration}}}') {video_out_path}"
+                command = f"""ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 -t $(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {os.path.join(temp_dir, 'video.mp4')} | awk '{{print $1-{padding_duration}}}') {video_out_path}"""
 
             subprocess.run(command, shell=True)
 

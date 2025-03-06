@@ -2,12 +2,14 @@ import { ModelQueueJob } from "./models";
 import {
   getAllDocuments,
   getDocumentById,
+  getDocumentByPath,
   updateDocument,
+  updateDocumentByPath,
 } from "./helpers/firestore";
 import { textToSpeech } from "./helpers/eleven-labs";
 import path from 'path';
 import { uploadFileToGCS } from "./helpers/gcs";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
 
 const updateStatus = async (
@@ -27,7 +29,7 @@ const updateStatus = async (
       console.error(`Failed to update clip ${job.clipId}:`, error);
     }
   }
-  if(job.params.dynamicClipChildId) {
+  if(job.params?.dynamicClipChildId) {
     await updateDocument(`dynamic-clips/${job.params.dynamicClipId}/start-segments`, job.params.dynamicClipChildId, updateData);
     if(status === "completed") {
       await updateDocument("dynamic-clips", job.params.dynamicClipId, {
@@ -44,7 +46,7 @@ const updateStatus = async (
         });
       }
     }
-  } else if(job.params.dynamicClipId){
+  } else if(job.params?.dynamicClipId){
     try {
       if(status === "completed") {
         const dynamicClip = await getDocumentById("dynamic-clips", job.params.dynamicClipId)
@@ -53,37 +55,104 @@ const updateStatus = async (
           data.status = "completed"
         }
         await updateDocument("dynamic-clips", job.params.dynamicClipId, data);
-        return;
+      } else {
+        await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
       }
-      await updateDocument("dynamic-clips", job.params.dynamicClipId, updateData);
     } catch (error) {
       console.error(`Failed to update clip ${job.clipId}:`, error);
     }
+  } else if(job?.dynamicInserts){
+    try {
+      const dynamicInserts = job.dynamicInserts;
+      if(status === "completed") {
+        await updateDocument("dynamic-inserts", dynamicInserts.dynamicInsertId, {
+          completedChildren: FieldValue.increment(1)
+        });
+        const dynamicInsert = await getDocumentById("dynamic-inserts", dynamicInserts.dynamicInsertId)
+        console.log(dynamicInsert)
+        console.log(dynamicInsert!.completedChildren, dynamicInsert!.totalChildren, dynamicInsert!.completedChildren >= dynamicInsert!.totalChildren)
+        if(dynamicInsert!.completedChildren >= dynamicInsert!.totalChildren){
+          await updateDocument("dynamic-inserts", dynamicInserts.dynamicInsertId, {
+            status: "completed"
+          });
+        }
+      } else {
+        await updateDocument(`dynamic-inserts`, dynamicInserts.dynamicInsertId, updateData);
+      }
+      await updateDocument(`dynamic-inserts/${dynamicInserts.dynamicInsertId}/inserts`, dynamicInserts.insertId, updateData);
+    } catch (error) {
+      console.error(`Failed to update clip ${job.clipId}:`, error);
+    }
+  }
+  if(job.params?.clipId){
+    await updateDocument(`clips`, job.params.clipId, updateData);
   }
 };
 
 const runLoop = async () => {
     while (true) {
-      const jobs = await getAllDocuments(
+      const pendingJobs = await getAllDocuments(
         "latent-sync-jobs",
         [["status", "==", "pending"]],
         "created_at",
         "asc"
       );
+      
+      const waitingJobs = await getAllDocuments(
+        "latent-sync-jobs",
+        [["status", "==", "waiting-dependency"]],
+        "created_at",
+        "asc"
+      );
 
-      if (jobs.length === 0) {
+      if (pendingJobs.length === 0) {
         console.log("No jobs found. Waiting for more jobs...");
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        continue;
       }
-      await handleJob(jobs[0] as ModelQueueJob);
+
+      for(const job of pendingJobs){
+        await handleJob(job as ModelQueueJob);
+      }
+
+      for (const job of waitingJobs) {
+        console.log(`Processing waiting job with ID: ${job.id}`);
+        
+        try {
+          console.log(`Fetching dependency document: ${job.dependencyDoc}`);
+          const jobData = await getDocumentByPath(job.dependencyDoc);
+          
+          console.log(`Dependency document status: ${jobData?.status || 'undefined'}`);
+          
+          if (!jobData) {
+            console.warn(`Dependency document not found: ${job.dependencyDoc}`);
+            continue;
+          }
+          
+          if (jobData.status === "completed") {
+            console.log(`Updating dependency document ${job.dependencyDoc} to 'pending' status`);
+            
+            await updateDocument("latent-sync-jobs", job.id, {
+              status: "pending"
+            });
+            
+            console.log(`Successfully updated dependency document ${job.dependencyDoc}`);
+          } else {
+            console.log(`Skipping update - dependency document status is not 'completed'`);
+          }
+        } catch (error) {
+          console.error(`Error processing job ${job.id} with dependency ${job.dependencyDoc}:`, error);
+          // Optionally: You might want to handle this error specifically, 
+          // e.g., updating the job's status to "error"
+        }
+      }
+      
+      await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 };
 
 const handleJob = async (job: ModelQueueJob) => {
   await updateStatus(job, "running");
   let generatedAudioUrl;
-  if(job.params.elevenLabsVoiceId){
+  if(job.params?.elevenLabsVoiceId){
     const outputFilePath = path.resolve(__dirname, 'output.mp3');
     await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, job.params.nextText)
     await uploadFileToGCS(outputFilePath, `elevenlabs/${job.id}.mp3`, "audio/mpeg")

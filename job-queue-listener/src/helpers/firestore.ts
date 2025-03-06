@@ -41,6 +41,19 @@ export const getDocumentById = async <T extends DocumentData>(
   return doc.data() as T;
 };
 
+export const getDocumentByPath = async <T extends DocumentData>(
+  path: string,
+): Promise<T | null> => {
+  const docRef = db.doc(path);
+  const doc = await docRef.get();
+
+  if (!doc.exists) {
+    return null;
+  }
+
+  return doc.data() as T;
+};
+
 interface DocumentWithSubcollections<T> {
   data: T | null;
   subcollections: { [key: string]: DocumentData[] };
@@ -119,6 +132,43 @@ export const updateDocument = async <T extends WithFieldValue<DocumentData>>(
       `Failed to update document with ID "${id}" in collection "${collection}":`,
       error
     );
+    throw error; // Re-throw the error if you want it to propagate
+  }
+};
+
+/**
+ * Updates a document using its full path
+ * 
+ * @param path - Full document path (e.g., "avatar-videos/1234" or "users/user123/settings/profile")
+ * @param data - Partial data to update in the document
+ * @returns Promise resolving when the update is complete
+ */
+export const updateDocumentByPath = async <T extends WithFieldValue<DocumentData>>(
+  path: string,
+  data: Partial<T>
+): Promise<void> => {
+  // Parse the path to get the document reference
+  const docRef = db.doc(path);
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      // Read the document inside the transaction
+      const docSnapshot = await transaction.get(docRef);
+
+      if (!docSnapshot.exists) {
+        throw new Error(`Document with path "${path}" does not exist`);
+      }
+
+      // Perform the update
+      transaction.update(docRef, {
+        ...data,
+        last_modified: FieldValue.serverTimestamp(),
+      });
+    });
+
+    console.log(`Document with path "${path}" updated successfully.`);
+  } catch (error) {
+    console.error(`Failed to update document with path "${path}":`, error);
     throw error; // Re-throw the error if you want it to propagate
   }
 };

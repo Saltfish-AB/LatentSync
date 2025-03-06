@@ -30,6 +30,7 @@ class RequestPayload(BaseModel):
     video_id: str
     audio_url: str
     start_from_backwards: Optional[bool] = None
+    force_video_length: Optional[bool] = None
 
 
 @app.on_event("startup")
@@ -95,6 +96,7 @@ async def process_requests():
                 video_id = payload["video_id"]
                 audio_url = payload["audio_url"]
                 start_from_backwards = payload["start_from_backwards"] or False
+                force_video_length = payload["force_video_length"] or False
 
                 video_path = "/latent-sync-data/{}.mp4".format(video_id)
                 data_path = "/latent-sync-data/{}.pth".format(video_id)
@@ -114,14 +116,15 @@ async def process_requests():
                     audio_path=audio_path,
                     video_out_path=video_out_path,
                     video_mask_path=video_out_path.replace(".mp4", "_mask.mp4"),
-                    num_frames=config.data.num_frames,
+                    num_frames=16,
                     num_inference_steps=20,
                     guidance_scale=1.5,
                     weight_dtype=dtype,
                     width=config.data.resolution,
                     height=config.data.resolution,
                     data_path=data_path,
-                    start_from_backwards=start_from_backwards
+                    start_from_backwards=start_from_backwards,
+                    force_video_length=force_video_length
                 )
 
                 output_id = uuid.uuid4()
