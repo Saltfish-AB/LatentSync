@@ -7,7 +7,7 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from ..utils.repeat import pad_whisper_chunks, pad_whisper_chunks_end, prepend_zero_tensors, repeat_to_length, truncate_to_length
+from ..utils.repeat import duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_start, prepend_zero_tensors, process_video_with_trim, repeat_to_length, truncate_to_length
 
 from ..utils.edit_audio import add_silence_to_audio
 from ..utils.download import download_file
@@ -379,6 +379,12 @@ class LipsyncPipeline(DiffusionPipeline):
                     original_video_frames = truncate_to_length(original_video_frames, num_whisper)
                     affine_matrices = truncate_to_length(affine_matrices, num_whisper)
                 
+                whisper_chunks, audio_samples, _ = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+                faces = duplicate_first_frames(faces)
+                boxes = duplicate_first_frames(boxes)
+                original_video_frames = duplicate_first_frames(original_video_frames)
+                affine_matrices = duplicate_first_frames(affine_matrices)
+
                 num_faces = len(faces)
                 print(num_faces, num_whisper)
 
@@ -507,3 +513,4 @@ class LipsyncPipeline(DiffusionPipeline):
 
             subprocess.run(command, shell=True)
 
+            process_video_with_trim(temp_dir, video_out_path)

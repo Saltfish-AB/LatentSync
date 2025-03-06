@@ -1,5 +1,8 @@
 import torch
 import numpy as np
+import os
+import subprocess
+import math
 
 def repeat_to_length(array, target_length):
     """Repeats an array (torch.Tensor, list, or np.ndarray) to match the target length."""
@@ -154,3 +157,117 @@ def pad_whisper_chunks_end(whisper_chunks, tensor_shape, audio_samples, audio_sa
         audio_samples = torch.cat([audio_samples, zero_padding], dim=0)
     
     return whisper_chunks, audio_samples, padding_duration
+
+def pad_whisper_chunks_start(whisper_chunks, tensor_shape, audio_samples, audio_sample_rate, fps=25):
+    """
+    Pads whisper_chunks with exactly 16 zero tensors at the beginning.
+    Also pads audio_samples with zeros to align with whisper_chunks in terms of time.
+    
+    Args:
+        whisper_chunks (list of torch.Tensor): The original list of tensors (video frames at `fps`).
+        tensor_shape (tuple): The shape of the zero tensors to create.
+        audio_samples (torch.Tensor): The original audio samples.
+        audio_sample_rate (int): The sample rate of the audio.
+        fps (int): The frames per second of whisper_chunks (default: 25).
+        
+    Returns:
+        tuple: Modified whisper_chunks, padded audio_samples, padding duration (sec).
+    """
+    # Add exactly 16 zero tensors at the beginning
+    num_to_add = 16
+    padding_duration = num_to_add / fps  # Time added due to chunk padding
+    
+    # Create zero tensors and prepend them to whisper_chunks
+    zero_tensors = [torch.zeros(tensor_shape) for _ in range(num_to_add)]
+    whisper_chunks = zero_tensors + whisper_chunks  # Prepend zero tensors
+    
+    # Compute expected total audio length (using updated whisper_chunks duration)
+    total_duration = len(whisper_chunks) / fps  # New total duration in seconds
+    expected_audio_length = int(total_duration * audio_sample_rate)  # Expected audio samples
+    
+    # Pad audio_samples at the beginning to match the new duration
+    pad_amount = int(padding_duration * audio_sample_rate)
+    zero_padding = torch.zeros(pad_amount, dtype=audio_samples.dtype)
+    audio_samples = torch.cat([zero_padding, audio_samples], dim=0)
+    
+    return whisper_chunks, audio_samples, padding_duration
+
+def duplicate_first_frames(array, num_frames=16):
+    """
+    Duplicates the first N frames of an array and adds them to the beginning.
+    Works with torch.Tensor, list, or np.ndarray.
+    
+    Args:
+        array: The input array (torch.Tensor, list, or np.ndarray).
+        num_frames: Number of frames to duplicate (default: 16).
+        
+    Returns:
+        The modified array with duplicated frames at the beginning.
+    """
+    current_length = len(array)
+    
+    print(f"Original length: {current_length}")
+    
+    if current_length == 0:
+        print("Empty array, nothing to duplicate.")
+        return array
+    
+    # Make sure we don't try to duplicate more frames than exist
+    frames_to_duplicate = min(num_frames, current_length)
+    print(f"Duplicating first {frames_to_duplicate} frames")
+    
+    if isinstance(array, torch.Tensor):
+        duplicate_frames = array[:frames_to_duplicate].clone()
+        new_array = torch.cat([duplicate_frames, array], dim=0)
+    elif isinstance(array, np.ndarray):
+        duplicate_frames = array[:frames_to_duplicate].copy()
+        new_array = np.concatenate([duplicate_frames, array])
+    elif isinstance(array, list):
+        duplicate_frames = array[:frames_to_duplicate].copy() if hasattr(array[:frames_to_duplicate], 'copy') else array[:frames_to_duplicate]
+        new_array = duplicate_frames + array
+    else:
+        raise TypeError("Unsupported type for frame duplication")
+    
+    print(f"New length: {len(new_array)}")
+    return new_array
+
+def process_video_with_trim(temp_dir, video_out_path, padding_duration=0, fps=25):
+    """
+    Process video by trimming the first 12 frames and handling padding.
+    Ensures audio and video stay in sync.
+    
+    Args:
+        temp_dir (str): Directory containing temporary video and audio files
+        video_out_path (str): Output path for the processed video
+        padding_duration (float): Duration of padding to remove from the end
+        fps (int): Frames per second of the video (default: 25)
+    """
+    # Number of frames to trim from the beginning
+    frames_to_trim = 16
+    trim_seconds = math.ceil(frames_to_trim / fps * 1000) / 1000
+    
+    # Get the input paths
+    input_video_path = os.path.join(temp_dir, 'video.mp4')
+    input_audio_path = os.path.join(temp_dir, 'audio.wav')
+    
+    # Create a trimmed version of the video first
+    trimmed_video_path = os.path.join(temp_dir, 'trimmed_video.mp4')
+    video_trim_command = f"ffmpeg -y -loglevel error -nostdin -ss {trim_seconds} -i {input_video_path} -c:v libx264 -an -q:v 0 {trimmed_video_path}"
+    subprocess.run(video_trim_command, shell=True)
+    
+    # Calculate final duration for the trimmed video
+    duration_command = f"ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {trimmed_video_path}"
+    duration_result = subprocess.run(duration_command, shell=True, capture_output=True, text=True)
+    trimmed_duration = float(duration_result.stdout.strip())
+    final_duration = trimmed_duration - padding_duration
+    
+    # Trim the audio to match the trimmed video's starting point
+    trimmed_audio_path = os.path.join(temp_dir, 'trimmed_audio.wav')
+    audio_trim_command = f"ffmpeg -y -loglevel error -nostdin -ss {trim_seconds} -i {input_audio_path} -t {final_duration} -c:a pcm_s16le {trimmed_audio_path}"
+    subprocess.run(audio_trim_command, shell=True)
+    
+    # Now combine the trimmed video and audio with exact duration matching
+    command = f"ffmpeg -y -loglevel error -nostdin -i {trimmed_video_path} -i {trimmed_audio_path} -c:v copy -c:a aac -shortest -map 0:v:0 -map 1:a:0 {video_out_path}"
+    subprocess.run(command, shell=True)
+    
+    return video_out_path
