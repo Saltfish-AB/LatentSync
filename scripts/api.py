@@ -69,7 +69,7 @@ async def startup_event():
     if is_xformers_available():
         unet.enable_xformers_memory_efficient_attention()
 
-    mouth_enhancer = MouthEnhancer(debug_mode=True)
+    mouth_enhancer = MouthEnhancer(debug_mode=False)
 
     pipeline = LipsyncPipeline(
         vae=vae,
