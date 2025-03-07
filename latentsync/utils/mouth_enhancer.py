@@ -99,7 +99,6 @@ class MouthEnhancer:
         # Store original dimensions
         original_img = input_img.copy()
         original_height, original_width = input_img.shape[:2]
-        print(f"Processing image with dimensions: {original_width}x{original_height}")
         
         # Reset the face helper for new image
         self.face_helper.clean_all()
@@ -107,7 +106,6 @@ class MouthEnhancer:
         # Detect face and landmarks
         self.face_helper.read_image(input_img)
         num_faces = self.face_helper.get_face_landmarks_5(only_center_face=False, resize=None, eye_dist_threshold=5)
-        print(f"Detected {num_faces} faces")
         
         if num_faces == 0:
             print("No face detected! Returning original image.")

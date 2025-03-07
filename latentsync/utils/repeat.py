@@ -366,37 +366,3 @@ def process_video_with_trim(temp_dir, video_out_path, padding_duration=0, fps=25
     subprocess.run(command, shell=True)
     
     return video_out_path
-
-def pad_whisper_chunks_start(whisper_chunks, tensor_shape, audio_samples, audio_sample_rate, fps=25):
-    """
-    Pads whisper_chunks with exactly 16 zero tensors at the beginning.
-    Also pads audio_samples with zeros to align with whisper_chunks in terms of time.
-    
-    Args:
-        whisper_chunks (list of torch.Tensor): The original list of tensors (video frames at `fps`).
-        tensor_shape (tuple): The shape of the zero tensors to create.
-        audio_samples (torch.Tensor): The original audio samples.
-        audio_sample_rate (int): The sample rate of the audio.
-        fps (int): The frames per second of whisper_chunks (default: 25).
-        
-    Returns:
-        tuple: Modified whisper_chunks, padded audio_samples, padding duration (sec).
-    """
-    # Add exactly 16 zero tensors at the beginning
-    num_to_add = 16
-    padding_duration = num_to_add / fps  # Time added due to chunk padding
-    
-    # Create zero tensors and prepend them to whisper_chunks
-    zero_tensors = [torch.zeros(tensor_shape) for _ in range(num_to_add)]
-    whisper_chunks = zero_tensors + whisper_chunks  # Prepend zero tensors
-    
-    # Compute expected total audio length (using updated whisper_chunks duration)
-    total_duration = len(whisper_chunks) / fps  # New total duration in seconds
-    expected_audio_length = int(total_duration * audio_sample_rate)  # Expected audio samples
-    
-    # Pad audio_samples at the beginning to match the new duration
-    pad_amount = int(padding_duration * audio_sample_rate)  # Calculate padding amount
-    zero_padding = torch.zeros(pad_amount, dtype=audio_samples.dtype)
-    audio_samples = torch.cat([zero_padding, audio_samples], dim=0)
-    
-    return whisper_chunks, audio_samples, padding_duration
