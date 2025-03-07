@@ -7,7 +7,7 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from main import MouthEnhancer
+from latentsync.utils.mouth_enhancer import MouthEnhancer
 
 from ..utils.repeat import add_start_silence, duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_start, pad_whisper_chunks_to_target, process_video_with_trim, repeat_to_length, truncate_to_length
 
