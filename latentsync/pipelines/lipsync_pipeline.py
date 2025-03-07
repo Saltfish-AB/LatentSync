@@ -7,7 +7,9 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from ..utils.repeat import add_start_silence, duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_to_target, process_video_with_trim, repeat_to_length, truncate_to_length
+from main import MouthEnhancer
+
+from ..utils.repeat import add_start_silence, duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_start, pad_whisper_chunks_to_target, process_video_with_trim, repeat_to_length, truncate_to_length
 
 from .affine_transform_video import affine_transform_video
 import numpy as np
@@ -59,6 +61,7 @@ class LipsyncPipeline(DiffusionPipeline):
             EulerAncestralDiscreteScheduler,
             DPMSolverMultistepScheduler,
         ],
+        mouth_enhancer: MouthEnhancer
     ):
         super().__init__()
 
@@ -120,6 +123,7 @@ class LipsyncPipeline(DiffusionPipeline):
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
         self.set_progress_bar_config(desc="Steps")
+        self.mouth_enhancer = mouth_enhancer
 
     def enable_vae_slicing(self):
         self.vae.enable_slicing()
@@ -359,7 +363,7 @@ class LipsyncPipeline(DiffusionPipeline):
                     if start_from_backwards:
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
                     else:
-                        audio_samples = add_start_silence(audio_samples, audio_sample_rate)
+                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
 
                     num_faces = len(faces)
@@ -383,12 +387,6 @@ class LipsyncPipeline(DiffusionPipeline):
                     boxes = truncate_to_length(boxes, num_whisper)
                     original_video_frames = truncate_to_length(original_video_frames, num_whisper)
                     affine_matrices = truncate_to_length(affine_matrices, num_whisper)
-                
-                whisper_chunks, audio_samples, _ = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
-                faces = duplicate_first_frames(faces)
-                boxes = duplicate_first_frames(boxes)
-                original_video_frames = duplicate_first_frames(original_video_frames)
-                affine_matrices = duplicate_first_frames(affine_matrices)
 
                 num_faces = len(faces)
                 print(num_faces, num_whisper)
@@ -509,7 +507,7 @@ class LipsyncPipeline(DiffusionPipeline):
                 shutil.rmtree(temp_dir)
             os.makedirs(temp_dir, exist_ok=True)
 
-            write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
+            write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25, mouth_enhancer=self.mouth_enhancer)
             # write_video(video_mask_path, masked_video_frames, fps=25)
 
             sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
@@ -520,5 +518,3 @@ class LipsyncPipeline(DiffusionPipeline):
                 command = f"""ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 -t $(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {os.path.join(temp_dir, 'video.mp4')} | awk '{{print $1-{padding_duration}}}') {video_out_path}"""
 
             subprocess.run(command, shell=True)
-
-            process_video_with_trim(temp_dir, video_out_path)

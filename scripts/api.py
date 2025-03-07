@@ -11,6 +11,7 @@ from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from diffusers.utils.import_utils import is_xformers_available
 from accelerate.utils import set_seed
+from latentsync.utils.mouth_enhancer import MouthEnhancer
 from latentsync.whisper.audio2feature import Audio2Feature
 import time
 import os
@@ -68,11 +69,14 @@ async def startup_event():
     if is_xformers_available():
         unet.enable_xformers_memory_efficient_attention()
 
+    mouth_enhancer = MouthEnhancer(debug_mode=True)
+
     pipeline = LipsyncPipeline(
         vae=vae,
         audio_encoder=audio_encoder,
         unet=unet,
         scheduler=scheduler,
+        mouth_enhancer=mouth_enhancer,
     ).to("cuda")
 
     torch.seed()

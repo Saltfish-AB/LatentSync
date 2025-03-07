@@ -117,6 +117,50 @@ def pad_whisper_chunks(whisper_chunks, tensor_shape, audio_samples, audio_sample
 
     return whisper_chunks, audio_samples, padding_duration
 
+def pad_whisper_chunks_start(whisper_chunks, tensor_shape, audio_samples, audio_sample_rate, num_frames=16, fps=25):
+    """
+    Pads whisper_chunks with a specific number of zero tensors at the beginning.
+    Also pads audio_samples with zeros at the beginning to align with whisper_chunks in terms of time.
+
+    Args:
+        whisper_chunks (list of torch.Tensor): The original list of tensors (video frames at `fps`).
+        tensor_shape (tuple): The shape of the zero tensors to create.
+        audio_samples (torch.Tensor): The original audio samples.
+        audio_sample_rate (int): The sample rate of the audio.
+        num_frames (int): The specific number of frames to add at the beginning (default: 16).
+        fps (int): The frames per second of whisper_chunks (default: 25).
+
+    Returns:
+        tuple: Modified whisper_chunks, padded audio_samples, padding duration (sec).
+    """
+    # Create a fresh copy of whisper_chunks to ensure we don't have reference issues
+    whisper_chunks_padded = whisper_chunks.copy()
+    
+    # Check if input is already a list to avoid errors
+    if not isinstance(whisper_chunks_padded, list):
+        whisper_chunks_padded = list(whisper_chunks_padded)
+    
+    # Calculate padding duration
+    padding_duration = num_frames / fps  # Time added due to frame padding
+
+    # Create the specified number of zero tensors
+    zero_tensors = [torch.zeros(tensor_shape) for _ in range(num_frames)]
+    
+    # Add zeros at the start
+    whisper_chunks_padded = zero_tensors + whisper_chunks_padded
+    
+    # Create a copy of audio_samples to ensure we don't have reference issues
+    audio_samples_padded = audio_samples.clone() if isinstance(audio_samples, torch.Tensor) else audio_samples.copy()
+    
+    # Pad audio_samples to match the new duration
+    pad_amount = int(padding_duration * audio_sample_rate)  # Convert time to samples
+    
+    # Create zero padding and add it at the start
+    zero_padding = torch.zeros(pad_amount, dtype=audio_samples_padded.dtype)
+    audio_samples_padded = torch.cat([zero_padding, audio_samples_padded], dim=0)
+    
+    return whisper_chunks_padded, audio_samples_padded, padding_duration
+
 def pad_whisper_chunks_end(whisper_chunks, tensor_shape, audio_samples, audio_sample_rate, fps=25, divisible_by=16):
     """
     Pads whisper_chunks with zero tensors to make its length divisible by a specified number.
@@ -213,7 +257,7 @@ def pad_whisper_chunks_to_target(whisper_chunks, tensor_shape, audio_samples, au
     
     return whisper_chunks_padded, audio_samples_padded, padding_duration
 
-def add_start_silence(audio_samples, audio_sample_rate, silence_duration=0.25):
+def add_start_silence(audio_samples, audio_sample_rate, silence_duration=1):
     """
     Adds a specified duration of silence at the beginning of audio samples.
     

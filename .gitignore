@@ -49,3 +49,4 @@ wandb/
 /models
 /assets
 /job-queue-listener/node_modules
+weights/
