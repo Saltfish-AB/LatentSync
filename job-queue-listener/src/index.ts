@@ -11,6 +11,15 @@ import path from 'path';
 import { uploadFileToGCS } from "./helpers/gcs";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
+import { Agent, Dispatcher, setGlobalDispatcher } from 'undici';
+
+const dispatcher = new Agent({
+  headersTimeout: 0, // 0 = no timeout
+  connectTimeout: 0, // 0 = no timeout
+  bodyTimeout: 0     // 0 = no timeout
+});
+
+setGlobalDispatcher(dispatcher);
 
 const updateStatus = async (
   job: ModelQueueJob,
@@ -175,7 +184,7 @@ const handleJob = async (job: ModelQueueJob) => {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
