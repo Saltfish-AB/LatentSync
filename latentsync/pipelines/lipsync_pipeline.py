@@ -208,6 +208,48 @@ class LipsyncPipeline(DiffusionPipeline):
         # scale the initial noise by the standard deviation required by the scheduler
         latents = latents * self.scheduler.init_noise_sigma
         return latents
+    
+    def prepare_neutral_latents(self, reference_face, latents, weight_dtype, device, generator):
+        """
+        Modify only the first few frames of latents using a reference face
+        """
+        # Ensure reference face has correct format and type
+        reference_face = reference_face.to(device=device, dtype=weight_dtype)
+        
+        # Make sure values are in expected range (-1 to 1)
+        if reference_face.max() > 1.0:
+            reference_face = reference_face / 255.0 * 2.0 - 1.0
+        
+        # Ensure correct dimensions [1, C, H, W]
+        if reference_face.dim() == 3:  # [C, H, W]
+            reference_face = reference_face.unsqueeze(0)
+        
+        # Encode the reference face
+        with torch.no_grad():
+            reference_latents = self.vae.encode(reference_face).latent_dist.sample(generator=generator)
+            reference_latents = (reference_latents - self.vae.config.shift_factor) * self.vae.config.scaling_factor
+            # Shape is now [1, C, H, W]
+        
+        # Add frame dimension
+        reference_latents = reference_latents.unsqueeze(2)  # [1, C, 1, H, W]
+        
+        # Create a copy of the original latents
+        new_latents = latents.clone()
+        
+        # Only modify the first N frames
+        num_frames_to_modify = 5  # Modify only first 5 frames
+        
+        for f in range(num_frames_to_modify):
+            # Calculate blend factor - gradually reduce influence of reference
+            blend_factor = 1.0 - (f / num_frames_to_modify)
+            
+            # Blend between reference latents and original noise
+            new_latents[:, :, f, :, :] = (
+                reference_latents[:, :, 0, :, :] * blend_factor + 
+                latents[:, :, f, :, :] * (1.0 - blend_factor)
+            )
+        
+        return new_latents
 
     def prepare_mask_latents(
         self, mask, masked_image, height, width, dtype, device, generator, do_classifier_free_guidance
@@ -363,7 +405,7 @@ class LipsyncPipeline(DiffusionPipeline):
                     if start_from_backwards:
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
                     else:
-                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
+                        #whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
 
                     num_faces = len(faces)
@@ -426,6 +468,17 @@ class LipsyncPipeline(DiffusionPipeline):
                     audio_embeds = None
                 inference_faces = faces[i * num_frames : (i + 1) * num_frames]
                 latents = all_latents[:, :, i * num_frames : (i + 1) * num_frames]
+
+                if i == 0:  # Only for the first chunk
+                    reference_face = inference_faces[0]
+                    latents = self.prepare_neutral_latents(
+                        reference_face,
+                        latents,
+                        weight_dtype,
+                        device,
+                        generator
+                    )
+
                 pixel_values, masked_pixel_values, masks = self.image_processor.prepare_masks_and_masked_images(
                     inference_faces, affine_transform=False
                 )

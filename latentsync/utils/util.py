@@ -121,7 +121,7 @@ def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, mout
     # out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"vp09"), fps, (width, height))
     for frame in video_frames:
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        frame = mouth_enhancer.process(frame)
+        #frame = mouth_enhancer.process(frame)
         out.write(frame)
     out.release()
 
