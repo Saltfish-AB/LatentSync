@@ -363,7 +363,7 @@ class LipsyncPipeline(DiffusionPipeline):
                     if start_from_backwards:
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
                     else:
-                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
+                        #whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
 
                     num_faces = len(faces)
