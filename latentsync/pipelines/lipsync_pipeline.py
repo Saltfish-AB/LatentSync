@@ -209,9 +209,19 @@ class LipsyncPipeline(DiffusionPipeline):
         latents = latents * self.scheduler.init_noise_sigma
         return latents
     
-    def prepare_neutral_latents(self, reference_face, latents, weight_dtype, device, generator):
+    def prepare_neutral_latents_with_padding(self, reference_face, latents, weight_dtype, device, generator, padding_size, batch_index, frames_per_batch=16):
         """
-        Modify only the first few frames of latents using a reference face
+        Modify latents using a reference face, accounting for dynamic padding
+        
+        Args:
+            reference_face: The reference face to blend
+            latents: The latents to modify
+            weight_dtype: The data type for computations
+            device: The device to use
+            generator: Random generator for consistency
+            padding_size: Number of padding frames at the start (0-16)
+            batch_index: Current batch index (i)
+            frames_per_batch: Number of frames per batch (default 16)
         """
         # Ensure reference face has correct format and type
         reference_face = reference_face.to(device=device, dtype=weight_dtype)
@@ -236,18 +246,44 @@ class LipsyncPipeline(DiffusionPipeline):
         # Create a copy of the original latents
         new_latents = latents.clone()
         
-        # Only modify the first N frames
-        num_frames_to_modify = 5  # Modify only first 5 frames
+        # Number of frames to blend
+        num_frames_to_modify = 5
         
-        for f in range(num_frames_to_modify):
-            # Calculate blend factor - gradually reduce influence of reference
-            blend_factor = 1.0 - (f / num_frames_to_modify)
+        # Calculate the global frame indices for blending
+        # First real frame is at global position = padding_size
+        # We want to blend the first 5 frames after the padding
+        start_frame_global = padding_size
+        end_frame_global = start_frame_global + num_frames_to_modify - 1
+        
+        # Calculate which frames in the current batch need to be modified
+        # Current batch covers global frames from (batch_index * frames_per_batch) to ((batch_index + 1) * frames_per_batch - 1)
+        batch_start_global = batch_index * frames_per_batch
+        batch_end_global = (batch_index + 1) * frames_per_batch - 1
+        
+        # Calculate the overlap between the frames to modify and the current batch
+        overlap_start = max(start_frame_global, batch_start_global)
+        overlap_end = min(end_frame_global, batch_end_global)
+        
+        # Only proceed if there's an overlap
+        if overlap_start <= overlap_end:
+            # Convert global frame indices to batch-local indices
+            local_start = overlap_start - batch_start_global
+            local_end = overlap_end - batch_start_global
             
-            # Blend between reference latents and original noise
-            new_latents[:, :, f, :, :] = (
-                reference_latents[:, :, 0, :, :] * blend_factor + 
-                latents[:, :, f, :, :] * (1.0 - blend_factor)
-            )
+            # Blend the overlapping frames
+            for local_idx in range(local_start, local_end + 1):
+                # Calculate the corresponding global index
+                global_idx = batch_start_global + local_idx
+                
+                # Calculate the blend factor based on position in the 5-frame sequence
+                blend_position = global_idx - start_frame_global
+                blend_factor = 1.0 - (blend_position / num_frames_to_modify)
+                
+                # Blend between reference latents and original noise
+                new_latents[:, :, local_idx, :, :] = (
+                    reference_latents[:, :, 0, :, :] * blend_factor + 
+                    latents[:, :, local_idx, :, :] * (1.0 - blend_factor)
+                )
         
         return new_latents
 
@@ -400,10 +436,11 @@ class LipsyncPipeline(DiffusionPipeline):
                 whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
                 
                 padding_duration = 0
+                start_pad_amount = 0
 
                 if not force_video_length:
                     if start_from_backwards:
-                        whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
+                        whisper_chunks, audio_samples, padding_duration, start_pad_amount = pad_whisper_chunks(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
                     else:
                         #whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_start(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, num_frames=6, fps=self.video_fps)
                         whisper_chunks, audio_samples, padding_duration = pad_whisper_chunks_end(whisper_chunks, whisper_chunks[0].shape, audio_samples, audio_sample_rate, self.video_fps)
@@ -423,6 +460,7 @@ class LipsyncPipeline(DiffusionPipeline):
 
                 num_faces = len(faces)
                 print(num_faces, num_whisper, start_from_backwards)
+                print("start_pad_amount", start_pad_amount)
 
                 if num_faces != num_whisper and start_from_backwards:
                     faces = truncate_to_length(faces, num_whisper)
@@ -457,6 +495,8 @@ class LipsyncPipeline(DiffusionPipeline):
                 generator,
             )
 
+            reference_face = faces[0]
+
             for i in tqdm.tqdm(range(num_inferences), desc="Doing inference..."):
                 if self.unet.add_audio_layer:
                     audio_embeds = torch.stack(whisper_chunks[i * num_frames : (i + 1) * num_frames])
@@ -469,15 +509,16 @@ class LipsyncPipeline(DiffusionPipeline):
                 inference_faces = faces[i * num_frames : (i + 1) * num_frames]
                 latents = all_latents[:, :, i * num_frames : (i + 1) * num_frames]
 
-                if i == 0:  # Only for the first chunk
-                    reference_face = inference_faces[0]
-                    latents = self.prepare_neutral_latents(
-                        reference_face,
-                        latents,
-                        weight_dtype,
-                        device,
-                        generator
-                    )
+                latents = self.prepare_neutral_latents_with_padding(
+                    reference_face,
+                    latents,
+                    weight_dtype,
+                    device,
+                    generator,
+                    padding_size=start_pad_amount,
+                    batch_index=i,
+                    frames_per_batch=num_frames
+                )
 
                 pixel_values, masked_pixel_values, masks = self.image_processor.prepare_masks_and_masked_images(
                     inference_faces, affine_transform=False

@@ -115,7 +115,7 @@ def pad_whisper_chunks(whisper_chunks, tensor_shape, audio_samples, audio_sample
         zero_padding = torch.zeros(pad_amount, dtype=audio_samples.dtype)
         audio_samples = torch.cat([zero_padding, audio_samples], dim=0)
 
-    return whisper_chunks, audio_samples, padding_duration
+    return whisper_chunks, audio_samples, padding_duration, num_to_add
 
 def pad_whisper_chunks_start(whisper_chunks, tensor_shape, audio_samples, audio_sample_rate, num_frames=16, fps=25):
     """
