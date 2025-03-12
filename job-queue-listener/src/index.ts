@@ -175,7 +175,7 @@ const handleJob = async (job: ModelQueueJob) => {
         video_id: job.params.avatarVideoId,
         audio_url: job.params.audioUrl || generatedAudioUrl,
         start_from_backwards: job.params.dynamicClipChildId ? true : false,
-        is_dynamic_clip: job.params.dynamicClipId !== undefined || false
+        is_dynamic_clip: job.params.isDynamicClip || false
     };
 
     console.log(payload)
