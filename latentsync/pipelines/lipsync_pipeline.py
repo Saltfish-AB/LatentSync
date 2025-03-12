@@ -399,7 +399,8 @@ class LipsyncPipeline(DiffusionPipeline):
             device = self._execution_device
             self.image_processor = ImageProcessor(height, mask=mask, device="cuda")
             self.set_progress_bar_config(desc=f"Sample frames: {num_frames}")
-            
+            print(data_path)
+            print(video_path)
             if data_path:
                 loaded_data = torch.load(data_path)
                 faces = loaded_data["faces"]
