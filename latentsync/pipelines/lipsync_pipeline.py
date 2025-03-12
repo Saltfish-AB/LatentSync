@@ -384,7 +384,7 @@ class LipsyncPipeline(DiffusionPipeline):
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
         data_path: Optional[str] = None,
-        start_from_backwards: Optional[bool] = True,
+        start_from_backwards: Optional[bool] = False,
         force_video_length: Optional[bool] = False,
         **kwargs,
     ):
