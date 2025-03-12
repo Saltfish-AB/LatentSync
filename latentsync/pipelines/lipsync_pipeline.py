@@ -7,8 +7,6 @@ import shutil
 from typing import Callable, List, Optional, Union
 import subprocess
 
-from latentsync.utils.mouth_enhancer import MouthEnhancer
-
 from ..utils.repeat import add_start_silence, duplicate_first_frames, pad_whisper_chunks, pad_whisper_chunks_end, pad_whisper_chunks_start, pad_whisper_chunks_to_target, process_video_with_trim, repeat_to_length, truncate_to_length
 
 from .affine_transform_video import affine_transform_video
@@ -61,7 +59,6 @@ class LipsyncPipeline(DiffusionPipeline):
             EulerAncestralDiscreteScheduler,
             DPMSolverMultistepScheduler,
         ],
-        mouth_enhancer: MouthEnhancer
     ):
         super().__init__()
 
@@ -123,7 +120,6 @@ class LipsyncPipeline(DiffusionPipeline):
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
         self.set_progress_bar_config(desc="Steps")
-        self.mouth_enhancer = mouth_enhancer
 
     def enable_vae_slicing(self):
         self.vae.enable_slicing()
@@ -602,7 +598,7 @@ class LipsyncPipeline(DiffusionPipeline):
                 shutil.rmtree(temp_dir)
             os.makedirs(temp_dir, exist_ok=True)
 
-            write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25, mouth_enhancer=self.mouth_enhancer)
+            write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
             # write_video(video_mask_path, masked_video_frames, fps=25)
 
             sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)

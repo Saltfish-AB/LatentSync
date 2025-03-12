@@ -33,8 +33,6 @@ from decord import AudioReader, VideoReader
 import shutil
 import subprocess
 
-from main import MouthEnhancer
-
 
 # Machine epsilon for a float32 (single precision)
 eps = np.finfo(np.float32).eps
@@ -115,13 +113,12 @@ def read_audio(audio_path: str, audio_sample_rate: int = 16000):
     return audio_samples
 
 
-def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, mouth_enhancer: MouthEnhancer):
+def write_video(video_output_path: str, video_frames: np.ndarray, fps: int):
     height, width = video_frames[0].shape[:2]
     out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
     # out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"vp09"), fps, (width, height))
     for frame in video_frames:
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        #frame = mouth_enhancer.process(frame)
         out.write(frame)
     out.release()
 
