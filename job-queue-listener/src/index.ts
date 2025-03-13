@@ -24,11 +24,15 @@ setGlobalDispatcher(dispatcher);
 const updateStatus = async (
   job: ModelQueueJob,
   status: string,
-  outputUrl?: string
+  outputUrl?: string,
+  gifUrl?: string
 ) => {
-  const updateData: { status: string; outputUrl?: string } = { status };
+  const updateData: { status: string; outputUrl?: string; gifUrl?: string; } = { status };
   if (outputUrl) {
     updateData.outputUrl = outputUrl;
+  }
+  if(gifUrl){
+    updateData.gifUrl = gifUrl;
   }
   await updateDocument("latent-sync-jobs", job.id, updateData);
   if (job.clipId) {
@@ -161,9 +165,11 @@ const runLoop = async () => {
 const handleJob = async (job: ModelQueueJob) => {
   await updateStatus(job, "running");
   let generatedAudioUrl;
+  let nextText = "";
   if(job.params?.elevenLabsVoiceId){
     const outputFilePath = path.resolve(__dirname, 'output.mp3');
-    await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, job.params.nextText)
+    nextText = job.params.nextText || "";
+    await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, nextText)
     await uploadFileToGCS(outputFilePath, `elevenlabs/${job.id}.mp3`, "audio/mpeg")
     generatedAudioUrl = `https://storage.saltfish.ai/elevenlabs/${job.id}.mp3`;
   }
@@ -175,7 +181,8 @@ const handleJob = async (job: ModelQueueJob) => {
         video_id: job.params.avatarVideoId,
         audio_url: job.params.audioUrl || generatedAudioUrl,
         start_from_backwards: job.params.dynamicClipChildId ? true : false,
-        is_dynamic_clip: job.params.isDynamicClip || false
+        is_dynamic_clip: job.params.isDynamicClip || false,
+        text: `${job.params.textPrompt} ${nextText}`,
     };
 
     console.log(payload)
@@ -193,6 +200,7 @@ const handleJob = async (job: ModelQueueJob) => {
     }
 
     const result = await response.json();
+    console.log(result)
     
     if(!job.params.dynamicClipId && !job.params.dynamicClipChildId){
       await updateStatus(job, "completed", result.output_url);
@@ -204,7 +212,7 @@ const handleJob = async (job: ModelQueueJob) => {
       const outputFilePath = path.resolve(__dirname, 'output.mp4');
       await concatVideos(result.output_url, dynamicClip.outputUrl, outputFilePath)
       await uploadFileToGCS(outputFilePath, `dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, "video/mp4")
-      await updateStatus(job, "completed", `https://storage.saltfish.ai/dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`);
+      await updateStatus(job, "completed", `https://storage.saltfish.ai/dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, result.gif_url);
     } else if(job.params.dynamicClipId) {
       const startSegments = await getAllDocuments(`dynamic-clips/${job.params.dynamicClipId}/start-segments`);
       for(const startSegment of startSegments){

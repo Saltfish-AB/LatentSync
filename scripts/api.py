@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException
+from latentsync.utils.thumbnail import create_video_thumbnail_gif
 from pydantic import BaseModel
 import asyncio
 from omegaconf import OmegaConf
@@ -32,6 +33,7 @@ class RequestPayload(BaseModel):
     start_from_backwards: Optional[bool] = None
     force_video_length: Optional[bool] = None
     is_dynamic_clip: Optional[bool] = None
+    text: Optional[str] = None
 
 
 @app.on_event("startup")
@@ -99,6 +101,7 @@ async def process_requests():
                 start_from_backwards = payload["start_from_backwards"] or False
                 force_video_length = payload["force_video_length"] or False
                 is_dynamic_clip = payload.get("is_dynamic_clip", False)
+                text = payload.get("text", None)
                 print("payload", payload)
 
                 video_path = "/latent-sync-data/{}.mp4".format(video_id)
@@ -145,12 +148,31 @@ async def process_requests():
                     source_file_path=f"{video_out_path}",
                     destination_blob_name=gcs_path
                 )
+
+                gif_id = None
+                if is_dynamic_clip and text:
+                    gif_output = "results/thumbnail.gif"
+                    gif_id = uuid.uuid4()
+                    create_video_thumbnail_gif(
+                        video_path=video_out_path,
+                        output_path=gif_output,
+                        duration=6,
+                        fps=3,
+                        subtitle_text=text
+                    )
+                    upload_video_to_gcs(
+                        bucket_name="saltfish-public",
+                        source_file_path=gif_output,
+                        destination_blob_name="gifs/{}.gif".format(gif_id)
+                    )
+
                 end_time = time.time()
                 elapsed_time = end_time - start_time
                 
                 task.set_result({
                     "message": "Request processed successfully",
                     "output_url": "https://storage.saltfish.ai/{}".format(gcs_path),
+                    "gif_url": "https://storage.saltfish.ai/gifs/{}.mp4".format(gif_id) if gif_id else None,
                     "elapsed_time": elapsed_time
                 })
         except Exception as e:
