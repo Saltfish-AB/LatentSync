@@ -172,7 +172,7 @@ async def process_requests():
                 task.set_result({
                     "message": "Request processed successfully",
                     "output_url": "https://storage.saltfish.ai/{}".format(gcs_path),
-                    "gif_url": "https://storage.saltfish.ai/gifs/{}.mp4".format(gif_id) if gif_id else None,
+                    "gif_url": "https://storage.saltfish.ai/gifs/{}.gif".format(gif_id) if gif_id else None,
                     "elapsed_time": elapsed_time
                 })
         except Exception as e:
