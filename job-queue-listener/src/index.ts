@@ -12,6 +12,7 @@ import { uploadFileToGCS } from "./helpers/gcs";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
 import { Agent, Dispatcher, setGlobalDispatcher } from 'undici';
+import { downloadFile } from "helpers/download";
 
 const dispatcher = new Agent({
   headersTimeout: 0, // 0 = no timeout
@@ -212,7 +213,10 @@ const handleJob = async (job: ModelQueueJob) => {
       const outputFilePath = path.resolve(__dirname, 'output.mp4');
       await concatVideos(result.output_url, dynamicClip.outputUrl, outputFilePath)
       await uploadFileToGCS(outputFilePath, `dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, "video/mp4")
-      await updateStatus(job, "completed", `https://storage.saltfish.ai/dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, result.gif_url);
+      const gifPath = `results/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`
+      await downloadFile(result.gif_url, gifPath)
+      await uploadFileToGCS(gifPath, `gifs/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`, "image/gif")
+      await updateStatus(job, "completed", `https://storage.saltfish.ai/dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, `https://storage.saltfish.ai/gifs/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`);
     } else if(job.params.dynamicClipId) {
       const startSegments = await getAllDocuments(`dynamic-clips/${job.params.dynamicClipId}/start-segments`);
       for(const startSegment of startSegments){
