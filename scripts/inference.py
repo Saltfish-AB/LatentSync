@@ -90,7 +90,6 @@ def main(config, args):
         weight_dtype=dtype,
         width=config.data.resolution,
         height=config.data.resolution,
-        data_file_url="https://storage.googleapis.com/saltfish-public/latentsync_data/data.pth"
         mask_image_path=config.data.mask_image_path,
     )
 
