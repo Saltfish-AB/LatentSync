@@ -39,7 +39,7 @@ async def startup_event():
     """
     Initialize shared variables and start the background worker.
     """
-    config = OmegaConf.load("configs/unet/second_stage.yaml")
+    config = OmegaConf.load("configs/unet/stage2.yaml")
     is_fp16_supported = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] > 7
     dtype = torch.float16 if is_fp16_supported else torch.float32
     scheduler = DDIMScheduler.from_pretrained("configs")
