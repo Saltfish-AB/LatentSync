@@ -40,7 +40,10 @@ wandb/
 *.jpeg
 *.csv
 
-!/latentsync/utils/mask.png
+# log files
+*.log
+
+!/latentsync/utils/mask*.png
 /checkpoints/
 !/assets/*
 
@@ -50,3 +53,5 @@ wandb/
 /assets
 /job-queue-listener/node_modules
 weights/
+!/docs/*
+!/internal/*.png
