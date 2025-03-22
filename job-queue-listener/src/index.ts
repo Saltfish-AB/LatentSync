@@ -13,6 +13,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
 import { Agent, Dispatcher, setGlobalDispatcher } from 'undici';
 import { downloadFile } from "./helpers/download";
+import { generateSubtitles } from "./helpers/whisper";
 
 const dispatcher = new Agent({
   headersTimeout: 0, // 0 = no timeout
@@ -175,14 +176,16 @@ const handleJob = async (job: ModelQueueJob) => {
     generatedAudioUrl = `https://storage.saltfish.ai/elevenlabs/${job.id}.mp3`;
   }
   console.log(job)
+  const audioUrl = job.params.audioUrl || generatedAudioUrl;
+  const isDynamicClip = job.params.isDynamicClip || false;
   try {
     const url = 'http://localhost:8000/process';
     const payload = {
         id: job.id,
         video_id: job.params.avatarVideoId,
-        audio_url: job.params.audioUrl || generatedAudioUrl,
+        audio_url: audioUrl,
         start_from_backwards: job.params.dynamicClipChildId ? true : false,
-        is_dynamic_clip: job.params.isDynamicClip || false,
+        is_dynamic_clip: isDynamicClip,
         text: `${job.params.textPrompt} ${nextText}`,
     };
 
@@ -216,6 +219,14 @@ const handleJob = async (job: ModelQueueJob) => {
       const gifPath = `${job.params.dynamicClipChildId}.gif`
       await downloadFile(result.gif_url, gifPath)
       await uploadFileToGCS(gifPath, `gifs/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`, "image/gif")
+
+      if(isDynamicClip && job.params.dynamicClipId && job.params.dynamicClipChildId){
+        const dataUri = await generateSubtitles(outputFilePath)
+        await updateDocument(`dynamic-clips/${job.params.dynamicClipId}/start-segments`, job.params.dynamicClipChildId, {
+          subtitlesData: dataUri
+        });
+      }
+
       await updateStatus(job, "completed", `https://storage.saltfish.ai/dynamic-clips/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.mp4`, `https://storage.saltfish.ai/gifs/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`);
     } else if(job.params.dynamicClipId) {
       const startSegments = await getAllDocuments(`dynamic-clips/${job.params.dynamicClipId}/start-segments`);
