@@ -207,7 +207,7 @@ class LipsyncPipeline(DiffusionPipeline):
     
     def prepare_neutral_latents_with_padding(self, reference_face, latents, weight_dtype, device, generator, padding_size, batch_index, frames_per_batch=16):
         """
-        Modify latents using a reference face, accounting for dynamic padding
+        Modify latents using a reference face, accounting for dynamic padding with improved blending
         
         Args:
             reference_face: The reference face to blend
@@ -242,12 +242,12 @@ class LipsyncPipeline(DiffusionPipeline):
         # Create a copy of the original latents
         new_latents = latents.clone()
         
-        # Number of frames to blend
-        num_frames_to_modify = 5
+        # Number of frames to blend - increased for smoother transition
+        num_frames_to_modify = 8
         
         # Calculate the global frame indices for blending
         # First real frame is at global position = padding_size
-        # We want to blend the first 5 frames after the padding
+        # We want to blend the first num_frames_to_modify frames after the padding
         start_frame_global = padding_size
         end_frame_global = start_frame_global + num_frames_to_modify - 1
         
@@ -271,9 +271,17 @@ class LipsyncPipeline(DiffusionPipeline):
                 # Calculate the corresponding global index
                 global_idx = batch_start_global + local_idx
                 
-                # Calculate the blend factor based on position in the 5-frame sequence
-                blend_position = global_idx - start_frame_global
-                blend_factor = 1.0 - (blend_position / num_frames_to_modify)
+                # Calculate the blend factor based on position in the sequence
+                # Using a smoother sigmoid-like curve instead of linear blending
+                blend_position = (global_idx - start_frame_global) / num_frames_to_modify
+                
+                # Cubic ease-out function for smoother transition
+                # This gives less weight to the reference face overall
+                blend_factor = 1.0 - (blend_position * blend_position * (3 - 2 * blend_position))
+                
+                # Reduce the maximum influence of the reference face
+                # Start with at most 70% reference instead of 100%
+                blend_factor = blend_factor * 0.3
                 
                 # Blend between reference latents and original noise
                 new_latents[:, :, local_idx, :, :] = (
