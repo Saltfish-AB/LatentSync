@@ -12,8 +12,9 @@ import { uploadFileToGCS } from "./helpers/gcs";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
 import { Agent, Dispatcher, setGlobalDispatcher } from 'undici';
-import { downloadFile, removeFile } from "./helpers/download";
+import { downloadFile } from "./helpers/download";
 import { generateSubtitles } from "./helpers/whisper";
+import { removeFile } from "./helpers/file";
 
 const dispatcher = new Agent({
   headersTimeout: 0, // 0 = no timeout
