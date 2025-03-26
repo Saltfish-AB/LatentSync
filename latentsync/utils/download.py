@@ -1,6 +1,7 @@
 import requests
 from tqdm import tqdm
 import os
+import shutil
 
 def download_file(url: str, destination: str, chunk_size: int = 8192) -> None:
     """
@@ -62,4 +63,49 @@ def cleanup_file(filepath: str) -> None:
             print(f"File {filepath} does not exist. No action taken.")
     except Exception as e:
         print(f"Error while trying to delete {filepath}: {e}")
+        raise
+
+
+def cleanup_folder(folder_path: str, keep_folder: bool = True) -> None:
+    """
+    Removes all files within a folder.
+    
+    Parameters:
+        folder_path (str): The path to the folder whose contents should be deleted.
+        keep_folder (bool): If True, keeps the folder structure but removes all contents.
+                           If False, removes the folder entirely. Default is True.
+    
+    Raises:
+        Exception: If the folder deletion fails.
+    """
+    try:
+        if not os.path.exists(folder_path):
+            print(f"Folder {folder_path} does not exist. No action taken.")
+            return
+            
+        if not os.path.isdir(folder_path):
+            print(f"{folder_path} is not a directory. No action taken.")
+            return
+            
+        if keep_folder:
+            # Count the number of files for reporting
+            file_count = sum([len(files) for _, _, files in os.walk(folder_path)])
+            
+            # Remove all contents but keep the folder
+            for item in os.listdir(folder_path):
+                item_path = os.path.join(folder_path, item)
+                
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    
+            print(f"Removed all contents ({file_count} files) from {folder_path}.")
+        else:
+            # Remove the entire folder and its contents
+            shutil.rmtree(folder_path)
+            print(f"Removed folder {folder_path} and all its contents.")
+    
+    except Exception as e:
+        print(f"Error while cleaning up folder {folder_path}: {e}")
         raise

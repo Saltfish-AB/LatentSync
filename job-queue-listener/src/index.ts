@@ -12,7 +12,7 @@ import { uploadFileToGCS } from "./helpers/gcs";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { concatVideos } from "./helpers/ffmpeg";
 import { Agent, Dispatcher, setGlobalDispatcher } from 'undici';
-import { downloadFile } from "./helpers/download";
+import { downloadFile, removeFile } from "./helpers/download";
 import { generateSubtitles } from "./helpers/whisper";
 
 const dispatcher = new Agent({
@@ -178,15 +178,20 @@ const handleJob = async (job: ModelQueueJob) => {
   console.log(job)
   const audioUrl = job.params.audioUrl || generatedAudioUrl;
   const isDynamicClip = job.params.isDynamicClip || false;
+
+  const avatar = await getDocumentById("avatar-videos", job.params.avatarVideoId)
+
   try {
     const url = 'http://localhost:8000/process';
     const payload = {
-        id: job.id,
-        video_id: job.params.avatarVideoId,
-        audio_url: audioUrl,
-        start_from_backwards: job.params.dynamicClipChildId ? true : false,
-        is_dynamic_clip: isDynamicClip,
-        text: `${job.params.textPrompt} ${nextText}`,
+      id: job.id,
+      video_id: job.params.avatarVideoId,
+      audio_url: audioUrl,
+      start_from_backwards: job.params.dynamicClipChildId ? true : false,
+      is_dynamic_clip: isDynamicClip,
+      text: `${job.params.textPrompt} ${nextText}`,
+      use_darken: avatar?.darkenData?.needs_correction ?? false,
+      brightness_factor: avatar?.darkenData?.recommended_brightness_factor ?? null,
     };
 
     console.log(payload)
@@ -219,6 +224,7 @@ const handleJob = async (job: ModelQueueJob) => {
       const gifPath = `${job.params.dynamicClipChildId}.gif`
       await downloadFile(result.gif_url, gifPath)
       await uploadFileToGCS(gifPath, `gifs/${job.params.dynamicClipId}/${job.params.dynamicClipChildId}.gif`, "image/gif")
+      await removeFile(gifPath)
 
       if(isDynamicClip && job.params.dynamicClipId && job.params.dynamicClipChildId){
         const dataUri = await generateSubtitles(outputFilePath)

@@ -53,3 +53,35 @@ export async function removeAllFiles(directoryPath: string): Promise<void> {
     );
   }
 }
+
+/**
+ * Removes a single file at the specified path.
+ * @param filePath - The path to the file to be removed.
+ * @returns A Promise that resolves when the file is removed, or rejects with an error.
+ */
+export async function removeFile(filePath: string): Promise<void> {
+  console.log(`Attempting to remove file: ${filePath}`);
+  
+  try {
+    // Check if the file exists before attempting to remove it
+    const exists = await fileExists(filePath);
+    
+    if (!exists) {
+      console.warn(`File not found: ${filePath}`);
+      return;
+    }
+    
+    // Check if the path is a directory
+    const stat = await fs.lstat(filePath);
+    if (stat.isDirectory()) {
+      throw new Error(`Cannot use removeFile on a directory: ${filePath}. Use removeAllFiles instead.`);
+    }
+    
+    // Remove the file
+    await fs.unlink(filePath);
+    console.log(`File successfully removed: ${filePath}`);
+  } catch (error) {
+    console.error(`Error removing file: ${filePath}`, error);
+    throw error; // Re-throw the error for the caller to handle
+  }
+}

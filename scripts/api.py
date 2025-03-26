@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException
+from latentsync.utils.darken_restore import calculate_inverse_factor, enhance_face_brightness
 from latentsync.utils.thumbnail import create_video_thumbnail_gif
 from pydantic import BaseModel
 import asyncio
@@ -7,7 +8,7 @@ from omegaconf import OmegaConf
 import torch
 from diffusers import AutoencoderKL, DDIMScheduler
 from latentsync.utils.gcs import upload_video_to_gcs
-from latentsync.utils.download import download_file
+from latentsync.utils.download import cleanup_folder, download_file
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from diffusers.utils.import_utils import is_xformers_available
@@ -34,6 +35,8 @@ class RequestPayload(BaseModel):
     force_video_length: Optional[bool] = None
     is_dynamic_clip: Optional[bool] = None
     text: Optional[str] = None
+    use_darken: Optional[bool] = None
+    brightness_factor: Optional[float] = 1
 
 
 @app.on_event("startup")
@@ -101,6 +104,8 @@ async def process_requests():
                 start_from_backwards = payload["start_from_backwards"] or False
                 force_video_length = payload["force_video_length"] or False
                 is_dynamic_clip = payload.get("is_dynamic_clip", False)
+                use_darken = payload.get("use_darken", False)
+                brightness_factor = payload.get("brightness_factor", 1)
                 text = payload.get("text", None)
                 print("payload", payload)
 
@@ -111,6 +116,12 @@ async def process_requests():
                 if is_dynamic_clip and os.path.exists("/latent-sync-data/{}_rotated.pth".format(video_id))  and os.path.exists("/latent-sync-data/{}_rotated.mp4".format(video_id)):
                     data_path = "/latent-sync-data/{}_rotated.pth".format(video_id)
                     video_path = "/latent-sync-data/{}_rotated.mp4".format(video_id)
+                    if use_darken:
+                        data_path = "/latent-sync-data/{}_darken_rotated.pth".format(video_id)
+                        video_path = "/latent-sync-data/{}_darken_rotated.mp4".format(video_id)
+                elif use_darken:
+                    data_path = "/latent-sync-data/{}_darken.pth".format(video_id)
+                    video_path = "/latent-sync-data/{}_darken.mp4".format(video_id)
 
                 if not os.path.exists(video_path):
                     raise HTTPException(status_code=400, detail="Video file not found.")
@@ -119,8 +130,8 @@ async def process_requests():
                 if not os.path.exists(audio_path):
                     download_file(audio_url, audio_path)
 
-                print(data_path)
-                print(video_path)
+                print("data_path", data_path)
+                print("video_path", video_path)
 
                 video_out_path = "results/{}.mp4".format(id)
                 config = app.state.shared_variable["config"]
@@ -140,6 +151,19 @@ async def process_requests():
                     start_from_backwards=start_from_backwards,
                     force_video_length=force_video_length
                 )
+
+                if use_darken:
+                    restored_video_out_path = "results/{}_restored.mp4".format(id)
+                    calculated_factor = calculate_inverse_factor(brightness_factor)
+                    enhance_face_brightness(
+                        video_out_path, 
+                        restored_video_out_path, 
+                        brightness_factor=calculated_factor,
+                        feather_amount=40,
+                        max_value=235,
+                        verbose=True
+                    )
+                    video_out_path = restored_video_out_path
 
                 output_id = uuid.uuid4()
                 gcs_path = "videos/{}.mp4".format(output_id)
@@ -168,6 +192,8 @@ async def process_requests():
 
                 end_time = time.time()
                 elapsed_time = end_time - start_time
+
+                cleanup_folder("./results")
                 
                 task.set_result({
                     "message": "Request processed successfully",
