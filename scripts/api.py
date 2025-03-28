@@ -44,7 +44,7 @@ async def startup_event():
     """
     Initialize shared variables and start the background worker.
     """
-    config = OmegaConf.load("configs/unet/second_stage.yaml")
+    config = OmegaConf.load("configs/unet/stage2.yaml")
     is_fp16_supported = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] > 7
     dtype = torch.float16 if is_fp16_supported else torch.float32
     scheduler = DDIMScheduler.from_pretrained("configs")
@@ -62,22 +62,18 @@ async def startup_event():
     vae.config.scaling_factor = 0.18215
     vae.config.shift_factor = 0
 
-    unet, _ = UNet3DConditionModel.from_pretrained(
+    denoising_unet, _ = UNet3DConditionModel.from_pretrained(
         OmegaConf.to_container(config.model),
-        "checkpoints/latentsync_unet.pt",  # load checkpoint
+        "checkpoints/latentsync_unet.pt",
         device="cpu",
     )
 
-    unet = unet.to(dtype=dtype)
-
-    # set xformers
-    if is_xformers_available():
-        unet.enable_xformers_memory_efficient_attention()
+    denoising_unet = denoising_unet.to(dtype=dtype)
 
     pipeline = LipsyncPipeline(
         vae=vae,
         audio_encoder=audio_encoder,
-        unet=unet,
+        denoising_unet=denoising_unet,
         scheduler=scheduler,
     ).to("cuda")
 
