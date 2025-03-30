@@ -8,20 +8,6 @@ import mediapipe as mp
 from tqdm import tqdm
 import re
 
-def get_video_info(video_path):
-    """Get detailed information about a video file using FFmpeg"""
-    cmd = ['ffmpeg', '-i', video_path, '-hide_banner']
-    result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-    return result.stderr.decode()
-
-def get_video_bitrate(video_path):
-    """Extract the video bitrate from the input file"""
-    info = get_video_info(video_path)
-    # Parse the bitrate from FFmpeg output
-    bitrate_matches = re.findall(r'bitrate: (\d+) kb/s', info)
-    if bitrate_matches:
-        return int(bitrate_matches[0])
-    return None
 
 def create_natural_face_mask(face_landmarks, image_shape, expansion_factor=1.1, feather_amount=40):
     """
@@ -333,17 +319,13 @@ def enhance_face_brightness(input_path, output_path, brightness_factor=1.3,
                 '-framerate', str(fps),
                 '-i', os.path.join(frames_dir, 'frame_%06d.png'),
                 '-c:v', 'libx264',
-                '-preset', 'slow',        # Change from 'medium' to 'slow' for better quality
-                '-crf', '17',             # Add CRF value (0-51, lower is better quality, 17-18 is visually lossless)
-                '-profile:v', 'high',     # Change from 'baseline' to 'high' for better compression efficiency
-                '-level', '4.1',          # Use a more modern level that allows higher bitrates
-                '-pix_fmt', 'yuv420p',    # Keep this for compatibility
+                '-preset', 'medium',
+                '-crf', '23',
+                '-profile:v', 'high',
+                '-level', '4.1',
+                '-pix_fmt', 'yuv420p',
                 '-movflags', '+faststart'
             ]
-
-            bitrate = get_video_bitrate(input_path)
-            if bitrate:
-                cmd.extend(['-b:v', f'{bitrate}k'])
             
             # Add output path
             cmd.append(output_path)

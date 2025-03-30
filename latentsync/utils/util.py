@@ -29,6 +29,7 @@ import cv2
 from decord import AudioReader, VideoReader
 import shutil
 import subprocess
+from pathlib import Path
 
 
 # Machine epsilon for a float32 (single precision)
@@ -110,14 +111,59 @@ def read_audio(audio_path: str, audio_sample_rate: int = 16000):
     return audio_samples
 
 
-def write_video(video_output_path: str, video_frames: np.ndarray, fps: int):
-    height, width = video_frames[0].shape[:2]
-    out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
-    # out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"vp09"), fps, (width, height))
-    for frame in video_frames:
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        out.write(frame)
-    out.release()
+def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, is_high_quality: bool = True):
+    """
+    Write video frames to a high-quality MP4 file using FFmpeg.
+    
+    Args:
+        video_output_path: Path to save the video
+        video_frames: Numpy array of frames with shape (n_frames, height, width, channels)
+        fps: Frames per second
+    
+    Returns:
+        Path to the output video file
+    """
+    # Ensure file has .mp4 extension
+    if not video_output_path.lower().endswith(".mp4"):
+        video_output_path = video_output_path.rsplit(".", 1)[0] + ".mp4"
+    
+    # Create a temporary directory for frames
+    temp_dir = Path(os.path.dirname(video_output_path)) / "temp_frames"
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Save frames as PNG (lossless)
+    for i, frame in enumerate(video_frames):
+        # OpenCV expects BGR, but our frames might be RGB
+        if frame.shape[2] == 3:
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        
+        cv2.imwrite(str(temp_dir / f"frame_{i:05d}.png"), frame)
+    
+    # Use FFmpeg to create a high-quality video
+    cmd = [
+        "ffmpeg",
+        "-y",  # Overwrite output file if it exists
+        "-r", str(fps),  # Frame rate
+        "-i", str(temp_dir / "frame_%05d.png"),  # Input pattern
+        "-c:v", "libx264",  # H.264 codec
+        "-crf", "17",  # Quality (0-51, lower is better, 17-18 is visually lossless)
+        "-preset", "slow",  # Slower preset = better compression
+        "-pix_fmt", "yuv420p",  # Pixel format for compatibility
+        video_output_path
+    ]
+    
+    # Run FFmpeg
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"FFmpeg failed: {e}")
+    finally:
+        # Clean up temporary files
+        for file in temp_dir.glob("*.png"):
+            os.remove(file)
+        os.rmdir(temp_dir)
+    
+    return video_output_path
 
 
 def init_dist(backend="nccl", **kwargs):

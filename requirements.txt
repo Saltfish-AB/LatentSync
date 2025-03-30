@@ -16,12 +16,5 @@ scenedetect==0.6.1
 ffmpeg-python==0.2.0
 lpips==0.1.4
 face-alignment==1.4.1
-<<<<<<< HEAD
-ninja==1.11.1.1
-pandas==2.0.3
-numpy==1.24.4
 gradio
-=======
-gradio==5.12.0
 numpy==1.26.4
->>>>>>> upstream/main
