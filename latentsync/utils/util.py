@@ -15,9 +15,10 @@
 import os
 import numpy as np
 import json
-from typing import Union
+from typing import Optional, Union
 import matplotlib.pyplot as plt
 
+from latentsync.utils.darken_restore import enhance_face_brightness
 import torch
 import torch.nn as nn
 import torchvision
@@ -111,7 +112,12 @@ def read_audio(audio_path: str, audio_sample_rate: int = 16000):
     return audio_samples
 
 
-def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, is_high_quality: bool = True):
+def write_video(
+        video_output_path: str,
+        video_frames: np.ndarray,
+        fps: int, is_high_quality: bool = True,
+        use_darken: Optional[bool] = False,
+        brightness_factor: Optional[float] = 1.0):
     """
     Write video frames to a high-quality MP4 file using FFmpeg.
     
@@ -119,6 +125,7 @@ def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, is_h
         video_output_path: Path to save the video
         video_frames: Numpy array of frames with shape (n_frames, height, width, channels)
         fps: Frames per second
+        is_high_quality: If True, use settings for maximum visual quality (larger file size)
     
     Returns:
         Path to the output video file
@@ -137,26 +144,63 @@ def write_video(video_output_path: str, video_frames: np.ndarray, fps: int, is_h
         if frame.shape[2] == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
-        cv2.imwrite(str(temp_dir / f"frame_{i:05d}.png"), frame)
+        # Use maximum PNG quality
+        cv2.imwrite(str(temp_dir / f"frame_{i:05d}.png"), frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
     
-    # Use FFmpeg to create a high-quality video
+    if use_darken and brightness_factor:
+        enhance_face_brightness(temp_dir, 0, len(video_frames), brightness_factor=brightness_factor)
+
+    # FFmpeg quality settings
+    if is_high_quality:
+        # Ultra high quality settings
+        crf = "10"        # Very low CRF for near-lossless quality (0-51, lower is better)
+        preset = "veryslow"  # Slowest preset = best compression efficiency
+        additional_args = [
+            "-tune", "film",  # Tune for high-detail content
+            "-color_primaries", "bt709",  # Ensure proper color space
+            "-color_trc", "bt709",
+            "-colorspace", "bt709",
+            "-movflags", "+faststart",   # For web playback optimization
+        ]
+    else:
+        # Default high quality settings
+        crf = "17"
+        preset = "slow"
+        additional_args = []
+    
+    # Base FFmpeg command
     cmd = [
         "ffmpeg",
         "-y",  # Overwrite output file if it exists
         "-r", str(fps),  # Frame rate
         "-i", str(temp_dir / "frame_%05d.png"),  # Input pattern
         "-c:v", "libx264",  # H.264 codec
-        "-crf", "17",  # Quality (0-51, lower is better, 17-18 is visually lossless)
-        "-preset", "slow",  # Slower preset = better compression
+    ]
+    
+    # Add quality settings
+    cmd.extend(["-crf", crf, "-preset", preset])
+    
+    # Add any additional arguments
+    cmd.extend(additional_args)
+    
+    # Common settings
+    cmd.extend([
         "-pix_fmt", "yuv420p",  # Pixel format for compatibility
         video_output_path
-    ]
+    ])
+
+    cmd.extend([
+        "-c:v", "libx265",
+        "-crf", "15",
+        "-preset", "veryslow",
+        "-x265-params", "lossless=1"  # For truly lossless output
+    ])
     
     # Run FFmpeg
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        raise Exception(f"FFmpeg failed: {e}")
+        raise Exception(f"FFmpeg failed: {e.stderr.decode()}")
     finally:
         # Clean up temporary files
         for file in temp_dir.glob("*.png"):

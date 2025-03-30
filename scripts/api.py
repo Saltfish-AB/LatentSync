@@ -132,6 +132,9 @@ async def process_requests():
                 video_out_path = "results/{}.mp4".format(id)
                 config = app.state.shared_variable["config"]
                 dtype = app.state.shared_variable["dtype"]
+
+                calculated_factor = calculate_inverse_factor(brightness_factor)
+
                 app.state.shared_variable["pipeline"](
                     video_path=video_path,
                     audio_path=audio_path,
@@ -145,21 +148,10 @@ async def process_requests():
                     height=config.data.resolution,
                     data_path=data_path,
                     start_from_backwards=start_from_backwards,
-                    force_video_length=force_video_length
+                    force_video_length=force_video_length,
+                    use_darken=use_darken,
+                    brightness_factor=calculated_factor,
                 )
-
-                if use_darken:
-                    restored_video_out_path = "results/{}_restored.mp4".format(id)
-                    calculated_factor = calculate_inverse_factor(brightness_factor)
-                    enhance_face_brightness(
-                        video_out_path, 
-                        restored_video_out_path, 
-                        brightness_factor=calculated_factor,
-                        feather_amount=40,
-                        max_value=235,
-                        verbose=True
-                    )
-                    video_out_path = restored_video_out_path
 
                 output_id = uuid.uuid4()
                 gcs_path = "videos/{}.mp4".format(output_id)
