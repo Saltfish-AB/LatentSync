@@ -192,7 +192,7 @@ const handleJob = async (job: ModelQueueJob) => {
       is_dynamic_clip: isDynamicClip,
       text: `${job.params.textPrompt} ${nextText}`,
       use_darken: avatar?.darkenData?.needs_correction ?? false,
-      brightness_factor: avatar?.darkenData?.recommended_brightness_factor ?? null,
+      brightness_factor: avatar?.darkenData?.recommended_brightness_factor ?? undefined,
     };
 
     console.log(payload)
@@ -206,6 +206,8 @@ const handleJob = async (job: ModelQueueJob) => {
     });
 
     if (!response.ok) {
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
         throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
