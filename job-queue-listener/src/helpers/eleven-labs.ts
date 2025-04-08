@@ -43,7 +43,7 @@ export const getVoiceDetails = async (voiceId: string): Promise<any> => {
 export type VoiceSettings = {
   stability: number;
   similarity_boost: number;
-  style: string;
+  style: number;
   use_speaker_boost: boolean;
   speed: number;
 }
@@ -94,6 +94,8 @@ export const textToSpeech = async (voiceId: string, textPrompt: string, outputFi
     });
 
     if (!response.ok) {
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
       throw new Error(`Failed to generate speech: ${response.status} ${response.statusText}`);
     }
 
