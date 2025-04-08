@@ -172,7 +172,7 @@ const handleJob = async (job: ModelQueueJob) => {
   if(job.params?.elevenLabsVoiceId){
     const outputFilePath = path.resolve(__dirname, 'output.mp3');
     nextText = job.params.nextText || "";
-    await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, nextText)
+    await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, nextText, job.params?.voiceSettings);
     await uploadFileToGCS(outputFilePath, `elevenlabs/${job.id}.mp3`, "audio/mpeg")
     generatedAudioUrl = `https://storage.saltfish.ai/elevenlabs/${job.id}.mp3`;
   }
