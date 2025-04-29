@@ -169,7 +169,8 @@ const handleJob = async (job: ModelQueueJob) => {
   await updateStatus(job, "running");
   let generatedAudioUrl;
   let nextText = "";
-  if(job.params?.elevenLabsVoiceId){
+  let predefinedAudioUrl = job.params?.audioUrl;
+  if(job.params?.elevenLabsVoiceId && !predefinedAudioUrl){
     const outputFilePath = path.resolve(__dirname, 'output.mp3');
     nextText = job.params.nextText || "";
     await textToSpeech(job.params.elevenLabsVoiceId, job.params.textPrompt, outputFilePath, nextText, job.params?.voiceSettings);
@@ -177,7 +178,7 @@ const handleJob = async (job: ModelQueueJob) => {
     generatedAudioUrl = `https://storage.saltfish.ai/elevenlabs/${job.id}.mp3`;
   }
   console.log(job)
-  const audioUrl = job.params.audioUrl || generatedAudioUrl;
+  const audioUrl = predefinedAudioUrl || generatedAudioUrl;
   const isDynamicClip = job.params.isDynamicClip || false;
 
   const avatar = await getDocumentById("avatar-videos", job.params.avatarVideoId)
